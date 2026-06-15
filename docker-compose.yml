@@ -1,0 +1,60 @@
+version: "3.8"
+
+services:
+  localstack:
+    image: localstack/localstack:4
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=sqs,sns,dynamodb
+      - AWS_DEFAULT_REGION=us-east-1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  infra-init:
+    build: .
+    command: ["python", "scripts/init_infra.py"]
+    depends_on:
+      localstack:
+        condition: service_healthy
+    environment:
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_ENDPOINT_URL=http://localstack:4566
+    volumes:
+      - ./scripts:/app/scripts
+
+  processor:
+    build: .
+    depends_on:
+      infra-init:
+        condition: service_completed_successfully
+    environment:
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - SQS_QUEUE_URL=http://localstack:4566/000000000000/events-queue
+      - DLQ_URL=http://localstack:4566/000000000000/events-dlq
+      - DYNAMODB_TABLE=events
+      - SCHEMAS_DIR=/app/schemas
+      - POLL_WAIT_SECONDS=5
+    restart: on-failure
+
+  producer:
+    build: .
+    command: ["python", "-m", "producer.auto_producer"]
+    depends_on:
+      infra-init:
+        condition: service_completed_successfully
+    environment:
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_ENDPOINT_URL=http://localstack:4566
+    restart: on-failure
