@@ -113,6 +113,26 @@ If the processor exits immediately after `make up`, check `docker-compose logs i
 
 Port 4566 busy? `docker ps | grep localstack` — you probably have another instance running.
 
+## Design decisions
+
+**Why SNS → SQS fan-out instead of producers writing directly to SQS?**
+Producers publish to a single SNS topic and don't know anything about what's downstream. Adding a new consumer (say, an audit log or a notification service) means creating a new SQS subscription — zero changes to any producer. It also means the processor can be taken down and restarted without producers needing to buffer or retry.
+
+**Why SQS over Kafka or Kinesis?**
+For this scale and use case, SQS is the right fit. It's fully managed, has native DLQ support with configurable redrive policies, and removes the ops burden of managing a Kafka cluster. Kinesis would make sense if we needed replay of historical events or strict ordering across partitions — neither is required here.
+
+**Why DynamoDB for persistence?**
+The downstream service that delivers events to clients needs low-latency reads per tenant. DynamoDB gives single-digit millisecond reads with a simple `tenant_id` partition key query, scales horizontally without tuning, and the flexible schema means we're not fighting migrations every time a new event type adds a field. The `PK=tenant_id, SK=timestamp#event_id` key design means per-tenant queries come back in time order without a secondary index.
+
+**Why JSON Schema for validation?**
+It's declarative and language-agnostic — the schema files are the source of truth and can be understood by anyone without reading code. Adding a new event type is dropping a `.json` file in `schemas/`; removing support for one is deleting it. No code changes, no redeploys of validation logic.
+
+**Idempotency**
+SQS guarantees at-least-once delivery, which means the same message can arrive more than once under normal operation (e.g. after a consumer restart). The store uses a DynamoDB `ConditionExpression` (`attribute_not_exists(event_id)`) on every write. If a duplicate arrives, DynamoDB rejects the write and the processor logs it and moves on — no double-counting, no error noise.
+
+**Resilience**
+Failed messages (bad JSON, schema violations, unexpected errors) are never deleted from SQS. After `maxReceiveCount=3` delivery attempts, SQS automatically moves them to the DLQ. Nothing is lost — the DLQ is a holding area for events that need inspection or a schema fix before being replayed.
+
 ## Config
 
 | Variable | Default | Description |
