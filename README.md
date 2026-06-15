@@ -2,6 +2,10 @@
 
 Take-home submission for Pismo's Sr. Consultant Data Engineer challenge.
 
+## Language note
+
+The challenge expresses a preference for Go. I chose Python here because the focus of the role is data engineering and I can demonstrate the design thinking — reactive consumption, schema-driven validation, tenant-aware persistence, DLQ resilience — more fluently in Python. The architecture maps 1:1 to Go: the SQS consumer becomes a goroutine with a channel, the validator stays the same logic with a Go JSON schema library, and DynamoDB access is a straight swap to the AWS SDK for Go. Happy to walk through a Go version or pair on it if that would be useful.
+
 ## What it does
 
 Events come in via SNS, get fanned out to SQS, and the processor picks them up from there.
