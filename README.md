@@ -115,23 +115,17 @@ Port 4566 busy? `docker ps | grep localstack` — you probably have another inst
 
 ## Design decisions
 
-**Why SNS → SQS fan-out instead of producers writing directly to SQS?**
-Producers publish to a single SNS topic and don't know anything about what's downstream. Adding a new consumer (say, an audit log or a notification service) means creating a new SQS subscription — zero changes to any producer. It also means the processor can be taken down and restarted without producers needing to buffer or retry.
+Producers publish to an SNS topic rather than writing directly to SQS. That way each producer just fires an event and doesn't need to know what happens next — if we wanted to add an audit log or a second downstream processor, it's a new SQS subscription, not a code change in every producer.
 
-**Why SQS over Kafka or Kinesis?**
-For this scale and use case, SQS is the right fit. It's fully managed, has native DLQ support with configurable redrive policies, and removes the ops burden of managing a Kafka cluster. Kinesis would make sense if we needed replay of historical events or strict ordering across partitions — neither is required here.
+I picked SQS over Kafka or Kinesis because the ops overhead isn't worth it here. SQS is managed, has built-in DLQ support, and does everything we need. Kinesis would make more sense if we needed strict ordering or historical replay — neither applies to this flow.
 
-**Why DynamoDB for persistence?**
-The downstream service that delivers events to clients needs low-latency reads per tenant. DynamoDB gives single-digit millisecond reads with a simple `tenant_id` partition key query, scales horizontally without tuning, and the flexible schema means we're not fighting migrations every time a new event type adds a field. The `PK=tenant_id, SK=timestamp#event_id` key design means per-tenant queries come back in time order without a secondary index.
+For persistence I went with DynamoDB. The downstream delivery service needs to read events per tenant quickly, and DynamoDB handles that well with `tenant_id` as the partition key. The sort key is `timestamp#event_id` so reads come back in time order automatically. Schema changes in event payloads don't require table migrations either, which matters when you're supporting multiple event types.
 
-**Why JSON Schema for validation?**
-It's declarative and language-agnostic — the schema files are the source of truth and can be understood by anyone without reading code. Adding a new event type is dropping a `.json` file in `schemas/`; removing support for one is deleting it. No code changes, no redeploys of validation logic.
+Validation is JSON Schema because it keeps the contract out of the code. The schema files in `schemas/` are the source of truth — readable by anyone, not just the people who wrote the processor. Adding a new event type is just adding a file.
 
-**Idempotency**
-SQS guarantees at-least-once delivery, which means the same message can arrive more than once under normal operation (e.g. after a consumer restart). The store uses a DynamoDB `ConditionExpression` (`attribute_not_exists(event_id)`) on every write. If a duplicate arrives, DynamoDB rejects the write and the processor logs it and moves on — no double-counting, no error noise.
+One thing worth calling out: SQS is at-least-once, so the same message can show up twice, especially after restarts. The store uses a DynamoDB condition (`attribute_not_exists(event_id)`) on every write so duplicates get silently dropped rather than written twice. It's a small thing but it matters in production.
 
-**Resilience**
-Failed messages (bad JSON, schema violations, unexpected errors) are never deleted from SQS. After `maxReceiveCount=3` delivery attempts, SQS automatically moves them to the DLQ. Nothing is lost — the DLQ is a holding area for events that need inspection or a schema fix before being replayed.
+On the failure side — messages that fail processing are never deleted from SQS. After three failed attempts, SQS moves them to the DLQ automatically. Nothing gets lost, they just sit there until someone fixes the schema or replays them.
 
 ## Config
 
