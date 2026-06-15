@@ -4,7 +4,7 @@ Take-home submission for Pismo's Sr. Consultant Data Engineer challenge.
 
 ## Language note
 
-The challenge expresses a preference for Go. I chose Python here because the focus of the role is data engineering and I can demonstrate the design thinking — reactive consumption, schema-driven validation, tenant-aware persistence, DLQ resilience — more fluently in Python. The architecture maps 1:1 to Go: the SQS consumer becomes a goroutine with a channel, the validator stays the same logic with a Go JSON schema library, and DynamoDB access is a straight swap to the AWS SDK for Go. Happy to walk through a Go version or pair on it if that would be useful.
+The challenge expresses a preference for Go. I chose Python here because the focus of the role is data engineering and I can demonstrate the design thinking — reactive consumption, schema-driven validation, tenant-aware persistence, DLQ resilience — more fluently in Python. The architecture maps 1:1 to Go: the SQS consumer becomes a goroutine with a channel, the validator stays the same logic with a Go JSON schema library, and DynamoDB access is a straight swap to the AWS SDK for Go. 
 
 ## What it does
 
@@ -12,10 +12,10 @@ Events come in via SNS, get fanned out to SQS, and the processor picks them up f
 
 ```
 SNS (events-topic)
-       │
-       ▼
-SQS (events-queue) ──► Processor ──► DynamoDB  (valid events)
-                                 └──► SQS DLQ   (invalid events)
+       |
+       v
+SQS (events-queue) --> Processor --> DynamoDB  (valid events)
+                                 \-> SQS DLQ   (invalid events)
 ```
 
 The processor long-polls SQS, validates each payload against a JSON schema, and either writes it to DynamoDB or forwards it to the dead-letter queue. DLQ has `maxReceiveCount=3` so flaky messages get a few attempts before giving up.
@@ -25,7 +25,7 @@ Some decisions I made:
 - Event envelope: `event_id`, `event_type`, `tenant_id`, `timestamp`, `schema_version`, `payload`
 - DynamoDB key: `PK=tenant_id`, `SK=timestamp#event_id` — time-ordered per-tenant reads without a scan
 - New event types are schema-only — add a `.json` file to `schemas/`, no code changes
-- LocalStack wraps SNS→SQS in a `{"Type":"Notification","Message":"..."}` envelope; the consumer strips it
+- LocalStack wraps SNS-to-SQS messages in a `{"Type":"Notification","Message":"..."}` envelope; the consumer strips it
 
 ## Layout
 
