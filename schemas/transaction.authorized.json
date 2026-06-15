@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["transaction_id", "account_id", "amount", "currency", "holder_name", "mcc"],
+  "properties": {
+    "transaction_id": { "type": "string", "minLength": 1 },
+    "account_id": { "type": "string", "minLength": 1 },
+    "amount": { "type": "number", "minimum": 0 },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "holder_name": { "type": "string", "minLength": 1 },
+    "mcc": {
+      "type": "string",
+      "pattern": "^[0-9]{4}$"
+    }
+  },
+  "additionalProperties": true
+}

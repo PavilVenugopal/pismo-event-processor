@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["payment_id", "from_account", "to_account", "amount", "currency", "method"],
+  "properties": {
+    "payment_id": { "type": "string", "minLength": 1 },
+    "from_account": { "type": "string", "minLength": 1 },
+    "to_account": { "type": "string", "minLength": 1 },
+    "amount": { "type": "number", "exclusiveMinimum": 0 },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "method": {
+      "type": "string",
+      "enum": ["pix", "ted", "doc", "wire"]
+    }
+  },
+  "additionalProperties": true
+}

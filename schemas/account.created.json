@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["account_id", "account_type", "holder_name", "opened_at"],
+  "properties": {
+    "account_id": { "type": "string", "minLength": 1 },
+    "account_type": {
+      "type": "string",
+      "enum": ["checking", "savings", "credit"]
+    },
+    "holder_name": { "type": "string", "minLength": 1 },
+    "opened_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}
