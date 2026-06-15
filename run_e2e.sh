@@ -69,17 +69,7 @@ done
 
 info "Waiting for infra-init to complete..."
 for i in $(seq 1 20); do
-    status=$($COMPOSE ps infra-init --format json 2>/dev/null | python3 -c "
-import sys, json
-data = sys.stdin.read().strip()
-if not data:
-    print('pending')
-else:
-    rows = json.loads(data) if data.startswith('[') else [json.loads(data)]
-    print(rows[0].get('State', 'pending'))
-" 2>/dev/null || echo "pending")
-
-    if [ "$status" = "exited" ] || [ "$status" = "Exit 0" ]; then
+    if $COMPOSE ps --all infra-init 2>/dev/null | grep -qiE "exit|exited|stopped"; then
         pass "Infra init complete"
         break
     fi
