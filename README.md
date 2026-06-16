@@ -91,6 +91,40 @@ make up && sleep 15 && make test-e2e
 
 Or just run `./run_e2e.sh` — it handles everything and tears down after.
 
+Sample output:
+
+```
+-> Checking prerequisites...
+-> Running unit tests...
+18 passed in 0.29s
+-> Unit tests passed
+
+-> Starting Docker stack...
+-> LocalStack is up
+-> Infra init complete
+-> Running end-to-end tests...
+
+tests/test_e2e.py::test_valid_event_persisted_in_dynamodb PASSED
+tests/test_e2e.py::test_invalid_event_routed_to_dlq PASSED
+
+2 passed in 16.32s
+-> E2E tests passed
+
+-> DynamoDB -- events table:
+  8 item(s) found
+  . payment.processed      | tenant=tenant-beta
+  . transaction.authorized | tenant=tenant-beta
+  . transaction.authorized | tenant=tenant-alpha
+  . payment.processed      | tenant=tenant-alpha
+  ... and 4 more
+
+-> DLQ -- events-dlq:
+  0 message(s) in DLQ
+
+-> All done.
+-> Tearing down Docker stack...
+```
+
 ## Publishing events manually
 
 After `make up`, you can push your own events. LocalStack doesn't care about credentials:
@@ -123,7 +157,7 @@ For persistence I went with DynamoDB. The downstream delivery service needs to r
 
 Validation is JSON Schema because it keeps the contract out of the code. The schema files in `schemas/` are the source of truth — readable by anyone, not just the people who wrote the processor. Adding a new event type is just adding a file.
 
-One thing worth calling out: SQS is at-least-once, so the same message can show up twice, especially after restarts. The store uses a DynamoDB condition (`attribute_not_exists(event_id)`) on every write so duplicates get silently dropped rather than written twice. It's a small thing but it matters in production.
+SQS is at-least-once, so the same message can show up twice, especially after restarts. The store uses a DynamoDB condition (`attribute_not_exists(event_id)`) on every write so duplicates get silently dropped rather than written twice. It's a small thing but it matters in production.
 
 On the failure side — messages that fail processing are never deleted from SQS. After three failed attempts, SQS moves them to the DLQ automatically. Nothing gets lost, they just sit there until someone fixes the schema or replays them.
 
